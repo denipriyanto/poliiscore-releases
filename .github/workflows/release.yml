@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag versi di poliisore-scoresheet (mis. v0.2.0)"
+        description: "Tag versi (mis. v0.2.0) — atau nama branch (mis. arsie) bila tidak dirilis"
         required: true
+      publish:
+        description: "Publikasikan sebagai rilis (matikan untuk build uji: installer hanya di Artifacts)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -58,6 +62,7 @@ jobs:
 
       # Tag harus sama dengan versi di package.json (tauri.conf.json membaca versi dari package.json).
       - name: Verify tag matches app version
+        if: ${{ inputs.publish }}
         shell: bash
         env:
           TAG: ${{ inputs.tag }}
@@ -79,7 +84,7 @@ jobs:
           owner: denipriyanto
           repo: poliiscore-releases
           releaseCommitish: main
-          tagName: ${{ inputs.tag }}
+          tagName: ${{ inputs.publish && inputs.tag || '' }}
           releaseName: "POLIISCORE Desktop ${{ inputs.tag }}"
           releaseBody: "Automated desktop build for POLIISCORE"
           releaseDraft: false
