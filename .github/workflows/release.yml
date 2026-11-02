@@ -1,0 +1,94 @@
+name: "Release POLIISCORE Desktop"
+
+# Build berjalan di repo publik ini (menit Actions gratis). Kode diambil dari repo private
+# denipriyanto/poliisore-scoresheet pada tag yang dipilih, lalu dirilis di repo ini.
+# Hanya bisa dijalankan manual oleh pemilik repo (tidak ada pemicu pull_request).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag versi di poliisore-scoresheet (mis. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "windows-latest"
+            artifact_name: "POLIISCORE-Windows-Installer"
+            artifact_path: |
+              src-tauri/target/release/bundle/nsis/*.exe
+              src-tauri/target/release/bundle/msi/*.msi
+          # Universal binary: satu .dmg untuk Apple Silicon & Mac Intel
+          - platform: "macos-latest"
+            artifact_name: "POLIISCORE-macOS-Installer"
+            args: "--target universal-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            artifact_path: |
+              src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout source (private)
+        uses: actions/checkout@v7
+        with:
+          repository: denipriyanto/poliisore-scoresheet
+          ref: ${{ inputs.tag }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Install project dependencies
+        run: npm install
+
+      # Tag harus sama dengan versi di package.json (tauri.conf.json membaca versi dari package.json).
+      - name: Verify tag matches app version
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${TAG}" != "v${VERSION}" ]; then
+            echo "Tag ${TAG} tidak sama dengan versi package.json (v${VERSION})"
+            exit 1
+          fi
+
+      # Rilis + latest.json (dibaca auto-updater aplikasi) dibuat di repo ini.
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          owner: denipriyanto
+          repo: poliiscore-releases
+          releaseCommitish: main
+          tagName: ${{ inputs.tag }}
+          releaseName: "POLIISCORE Desktop ${{ inputs.tag }}"
+          releaseBody: "Automated desktop build for POLIISCORE"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Upload Desktop Artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
