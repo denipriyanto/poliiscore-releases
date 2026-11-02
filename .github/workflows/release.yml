@@ -41,7 +41,7 @@ jobs:
         with:
           repository: denipriyanto/poliisore-scoresheet
           ref: ${{ inputs.tag }}
-          token: ${{ secrets.RELEASE_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.RELEASES_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
